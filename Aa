@@ -1,8 +1,14 @@
+
 #include "main.h"
 
 #define PASSWORD_LENGTH 4
+#define MAX_ATTEMPTS 3
+#define LOCKOUT_TIME 10000
 
-const char correct_password[] = "1234";
+const char correct_password[PASSWORD_LENGTH + 1] = "1234";
+
+
+/* ================= KEYPAD ================= */
 
 char Keypad_GetKey(void)
 {
@@ -14,7 +20,7 @@ char Keypad_GetKey(void)
         {'*','0','#','D'}
     };
 
-    uint16_t rows[4] =
+    uint16_t row_pins[4] =
     {
         GPIO_PIN_0,
         GPIO_PIN_1,
@@ -22,7 +28,7 @@ char Keypad_GetKey(void)
         GPIO_PIN_3
     };
 
-    uint16_t cols[4] =
+    uint16_t col_pins[4] =
     {
         GPIO_PIN_4,
         GPIO_PIN_5,
@@ -40,20 +46,25 @@ char Keypad_GetKey(void)
 
         /* Current row LOW */
         HAL_GPIO_WritePin(GPIOC,
-                          rows[row],
+                          row_pins[row],
                           GPIO_PIN_RESET);
 
         HAL_Delay(1);
 
         for (int col = 0; col < 4; col++)
         {
-            if (HAL_GPIO_ReadPin(GPIOC, cols[col]) == GPIO_PIN_RESET)
+            if (HAL_GPIO_ReadPin(GPIOC, col_pins[col])
+                == GPIO_PIN_RESET)
             {
+                /* Debounce */
                 HAL_Delay(20);
 
-                if (HAL_GPIO_ReadPin(GPIOC, cols[col]) == GPIO_PIN_RESET)
+                if (HAL_GPIO_ReadPin(GPIOC, col_pins[col])
+                    == GPIO_PIN_RESET)
                 {
-                    while (HAL_GPIO_ReadPin(GPIOC, cols[col]) == GPIO_PIN_RESET)
+                    /* Wait for key release */
+                    while (HAL_GPIO_ReadPin(GPIOC, col_pins[col])
+                           == GPIO_PIN_RESET)
                     {
                     }
 
@@ -67,26 +78,13 @@ char Keypad_GetKey(void)
 }
 
 
-int main(void)
+/* ================= PASSWORD ================= */
+
+uint8_t CheckPassword(void)
 {
-    char entered_password[5];
+    char entered_password[PASSWORD_LENGTH + 1];
     char key;
     uint8_t index = 0;
-    uint8_t correct;
-
-    HAL_Init();
-    SystemClock_Config();
-    MX_GPIO_Init();
-
-    /* Green LED OFF */
-    HAL_GPIO_WritePin(GPIOA,
-                      GPIO_PIN_6,
-                      GPIO_PIN_RESET);
-
-    /* Buzzer OFF */
-    HAL_GPIO_WritePin(GPIOB,
-                      GPIO_PIN_10,
-                      GPIO_PIN_RESET);
 
     while (1)
     {
@@ -97,7 +95,7 @@ int main(void)
             continue;
         }
 
-        /* Number */
+        /* Number key */
         if (key >= '0' && key <= '9')
         {
             if (index < PASSWORD_LENGTH)
@@ -107,65 +105,290 @@ int main(void)
             }
         }
 
-        /* Clear */
+        /* * = Clear */
         else if (key == '*')
         {
             index = 0;
-
-            HAL_GPIO_WritePin(GPIOA,
-                              GPIO_PIN_6,
-                              GPIO_PIN_RESET);
-
-            HAL_GPIO_WritePin(GPIOB,
-                              GPIO_PIN_10,
-                              GPIO_PIN_RESET);
         }
 
-        /* Submit */
+        /* # = Submit */
         else if (key == '#')
         {
-            correct = 1;
-
             if (index != PASSWORD_LENGTH)
             {
-                correct = 0;
+                return 0;
             }
-            else
+
+            entered_password[index] = '\0';
+
+            for (index = 0; index < PASSWORD_LENGTH; index++)
             {
-                for (uint8_t i = 0; i < PASSWORD_LENGTH; i++)
+                if (entered_password[index]
+                    != correct_password[index])
                 {
-                    if (entered_password[i] != correct_password[i])
+                    return 0;
+                }
+            }
+
+            return 1;
+        }
+    }
+}
+
+
+/* ================= LED / BUZZER FUNCTIONS ================= */
+
+void White_On(void)
+{
+    HAL_GPIO_WritePin(GPIOA,
+                      GPIO_PIN_1,
+                      GPIO_PIN_SET);
+}
+
+void White_Off(void)
+{
+    HAL_GPIO_WritePin(GPIOA,
+                      GPIO_PIN_1,
+                      GPIO_PIN_RESET);
+}
+
+
+void Green_On(void)
+{
+    HAL_GPIO_WritePin(GPIOA,
+                      GPIO_PIN_6,
+                      GPIO_PIN_SET);
+}
+
+void Green_Off(void)
+{
+    HAL_GPIO_WritePin(GPIOA,
+                      GPIO_PIN_6,
+                      GPIO_PIN_RESET);
+}
+
+
+void Red_On(void)
+{
+    HAL_GPIO_WritePin(GPIOB,
+                      GPIO_PIN_5,
+                      GPIO_PIN_SET);
+}
+
+void Red_Off(void)
+{
+    HAL_GPIO_WritePin(GPIOB,
+                      GPIO_PIN_5,
+                      GPIO_PIN_RESET);
+}
+
+
+void Buzzer_On(void)
+{
+    HAL_GPIO_WritePin(GPIOB,
+                      GPIO_PIN_10,
+                      GPIO_PIN_SET);
+}
+
+void Buzzer_Off(void)
+{
+    HAL_GPIO_WritePin(GPIOB,
+                      GPIO_PIN_10,
+                      GPIO_PIN_RESET);
+}
+
+
+/* ================= ALL OFF ================= */
+
+void All_Off(void)
+{
+    White_Off();
+    Green_Off();
+    Red_Off();
+    Buzzer_Off();
+}
+
+
+/* ================= LOCKOUT ================= */
+
+void Lockout(void)
+{
+    /*
+     * 3 wrong attempts.
+     *
+     * White OFF
+     * Green OFF
+     * Red ON
+     * Buzzer ON
+     */
+
+    White_Off();
+    Green_Off();
+    Red_On();
+    Buzzer_On();
+
+    /* Lock system for 10 seconds */
+    HAL_Delay(LOCKOUT_TIME);
+
+    /* Return to normal */
+    Red_Off();
+    Buzzer_Off();
+}
+
+
+/* ================= MAIN ================= */
+
+int main(void)
+{
+    uint8_t attempts;
+    uint8_t password_correct;
+
+    HAL_Init();
+    SystemClock_Config();
+    MX_GPIO_Init();
+
+    /* Initial state */
+    All_Off();
+
+    while (1)
+    {
+        /*
+         * IR sensor is ACTIVE LOW.
+         *
+         * PB0 = LOW
+         * means person detected.
+         */
+
+        if (HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_0)
+            == GPIO_PIN_RESET)
+        {
+            /*
+             * Person detected.
+             *
+             * White LED = system active
+             * Green = OFF
+             * Red = OFF
+             * Buzzer = OFF
+             */
+
+            White_On();
+            Green_Off();
+            Red_Off();
+            Buzzer_Off();
+
+            HAL_Delay(500);
+
+            attempts = 0;
+
+            /* ================= PASSWORD LOOP ================= */
+
+            while (attempts < MAX_ATTEMPTS)
+            {
+                /*
+                 * Wait for PIN.
+                 */
+                password_correct = CheckPassword();
+
+                /* ================= CORRECT ================= */
+
+                if (password_correct)
+                {
+                    /*
+                     * Access granted.
+                     *
+                     * White OFF
+                     * Green ON
+                     * Red OFF
+                     * Buzzer OFF
+                     */
+
+                    White_Off();
+                    Green_On();
+                    Red_Off();
+                    Buzzer_Off();
+
+                    /*
+                     * Keep green ON
+                     * for 3 seconds.
+                     */
+
+                    HAL_Delay(3000);
+
+                    Green_Off();
+
+                    break;
+                }
+
+                /* ================= WRONG ================= */
+
+                else
+                {
+                    attempts++;
+
+                    /*
+                     * Access denied.
+                     *
+                     * White OFF
+                     * Green OFF
+                     * Red ON
+                     * Buzzer ON
+                     */
+
+                    White_Off();
+                    Green_Off();
+                    Red_On();
+                    Buzzer_On();
+
+                    /*
+                     * Warning for 1 second.
+                     */
+
+                    HAL_Delay(1000);
+
+                    Red_Off();
+                    Buzzer_Off();
+
+                    /*
+                     * 3 wrong attempts
+                     */
+
+                    if (attempts >= MAX_ATTEMPTS)
                     {
-                        correct = 0;
-                        break;
+                        Lockout();
+                    }
+                    else
+                    {
+                        /*
+                         * Turn white LED back ON
+                         * for next attempt.
+                         */
+
+                        White_On();
+
+                        HAL_Delay(500);
                     }
                 }
             }
 
-            if (correct)
-            {
-                /* Correct PIN */
-                HAL_GPIO_WritePin(GPIOA,
-                                  GPIO_PIN_6,
-                                  GPIO_PIN_SET);
+            /*
+             * Wait until the person leaves
+             * the IR sensor.
+             *
+             * This prevents the same detection
+             * from immediately starting again.
+             */
 
-                HAL_GPIO_WritePin(GPIOB,
-                                  GPIO_PIN_10,
-                                  GPIO_PIN_SET);
-            }
-            else
+            while (HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_0)
+                   == GPIO_PIN_RESET)
             {
-                /* Wrong PIN */
-                HAL_GPIO_WritePin(GPIOA,
-                                  GPIO_PIN_6,
-                                  GPIO_PIN_RESET);
-
-                HAL_GPIO_WritePin(GPIOB,
-                                  GPIO_PIN_10,
-                                  GPIO_PIN_RESET);
+                HAL_Delay(50);
             }
 
-            index = 0;
+            All_Off();
+
+            HAL_Delay(500);
         }
+
+        HAL_Delay(50);
     }
 }
