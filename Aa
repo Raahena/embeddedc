@@ -1,3 +1,8 @@
+#include "main.h"
+
+
+/* ================= KEYPAD ================= */
+
 char Keypad_GetKey(void)
 {
     const char keymap[4][4] =
@@ -26,7 +31,7 @@ char Keypad_GetKey(void)
 
     for (int row = 0; row < 4; row++)
     {
-        /* Set all rows HIGH */
+        /* All rows HIGH */
         HAL_GPIO_WritePin(GPIOC,
                           GPIO_PIN_0 |
                           GPIO_PIN_1 |
@@ -34,14 +39,13 @@ char Keypad_GetKey(void)
                           GPIO_PIN_3,
                           GPIO_PIN_SET);
 
-        /* Set current row LOW */
+        /* Current row LOW */
         HAL_GPIO_WritePin(GPIOC,
                           row_pins[row],
                           GPIO_PIN_RESET);
 
         HAL_Delay(1);
 
-        /* Check columns */
         for (int col = 0; col < 4; col++)
         {
             if (HAL_GPIO_ReadPin(GPIOC, col_pins[col])
@@ -53,7 +57,7 @@ char Keypad_GetKey(void)
                 if (HAL_GPIO_ReadPin(GPIOC, col_pins[col])
                     == GPIO_PIN_RESET)
                 {
-                    /* Wait for key release */
+                    /* Wait for release */
                     while (HAL_GPIO_ReadPin(GPIOC, col_pins[col])
                            == GPIO_PIN_RESET)
                     {
@@ -68,6 +72,86 @@ char Keypad_GetKey(void)
 
     return 0;
 }
+
+
+/* ================= LED FUNCTIONS ================= */
+
+/* White LED = PA1 */
+void White_On(void)
+{
+    HAL_GPIO_WritePin(GPIOA,
+                      GPIO_PIN_1,
+                      GPIO_PIN_SET);
+}
+
+void White_Off(void)
+{
+    HAL_GPIO_WritePin(GPIOA,
+                      GPIO_PIN_1,
+                      GPIO_PIN_RESET);
+}
+
+
+/* Red LED = PA6 */
+void Red_On(void)
+{
+    HAL_GPIO_WritePin(GPIOA,
+                      GPIO_PIN_6,
+                      GPIO_PIN_SET);
+}
+
+void Red_Off(void)
+{
+    HAL_GPIO_WritePin(GPIOA,
+                      GPIO_PIN_6,
+                      GPIO_PIN_RESET);
+}
+
+
+/* Green LED = PB5 */
+void Green_On(void)
+{
+    HAL_GPIO_WritePin(GPIOB,
+                      GPIO_PIN_5,
+                      GPIO_PIN_SET);
+}
+
+void Green_Off(void)
+{
+    HAL_GPIO_WritePin(GPIOB,
+                      GPIO_PIN_5,
+                      GPIO_PIN_RESET);
+}
+
+
+/* Buzzer = PB10 */
+void Buzzer_On(void)
+{
+    HAL_GPIO_WritePin(GPIOB,
+                      GPIO_PIN_10,
+                      GPIO_PIN_SET);
+}
+
+void Buzzer_Off(void)
+{
+    HAL_GPIO_WritePin(GPIOB,
+                      GPIO_PIN_10,
+                      GPIO_PIN_RESET);
+}
+
+
+/* Turn everything OFF */
+void All_Off(void)
+{
+    White_Off();
+    Red_Off();
+    Green_Off();
+    Buzzer_Off();
+}
+
+
+/* ================= MAIN ================= */
+
 int main(void)
 {
     char key;
@@ -76,6 +160,7 @@ int main(void)
     SystemClock_Config();
     MX_GPIO_Init();
 
+    /* Start with everything OFF */
     All_Off();
 
     while (1)
@@ -84,11 +169,12 @@ int main(void)
 
         if (key != 0)
         {
-            /* Every detected key: white ON */
+            /* Every valid key turns WHITE ON */
             White_On();
 
             /*
-             * GREEN = digits 1,2,3,4
+             * 1,2,3,4
+             * WHITE + GREEN
              */
             if (key == '1' ||
                 key == '2' ||
@@ -99,23 +185,35 @@ int main(void)
             }
 
             /*
-             * RED = #
+             * #
+             * WHITE + RED
              */
-            if (key == '#')
+            else if (key == '#')
             {
                 Red_On();
             }
 
             /*
-             * BUZZER = *
+             * *
+             * WHITE + BUZZER
              */
-            if (key == '*')
+            else if (key == '*')
             {
                 Buzzer_On();
             }
 
+            /*
+             * Any other key
+             * WHITE only
+             */
+            else
+            {
+                /* Nothing else */
+            }
+
             HAL_Delay(500);
 
+            /* Turn everything OFF */
             All_Off();
         }
     }
